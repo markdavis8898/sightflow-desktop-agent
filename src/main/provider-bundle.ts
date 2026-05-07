@@ -5,6 +5,19 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { ProviderAdapter, ProviderEvent, ProviderInput } from '../core/session-types'
 
+export const BUILTIN_DOUBAO_PROVIDER_ID = 'volcengine-ark'
+
+/**
+ * 内置 doubao（火山方舟）provider 的资源目录。
+ * 打包后 resources/** 会经 asarUnpack，落到 app.asar.unpacked/resources/ 下。
+ */
+function getBuiltinProviderDir(id: string): string {
+  const root = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked')
+    : app.getAppPath()
+  return path.join(root, 'resources', 'providers', id)
+}
+
 export type ProviderSchemaField =
   | {
       type: 'string' | 'password'
@@ -155,6 +168,69 @@ export async function getInstalledProviderManifest(
   } catch {
     return null
   }
+}
+
+/** 读取内置 doubao 的原始 manifest（保留 apiKey 字段，供调试 / 校验） */
+export async function getBuiltinDoubaoManifestRaw(): Promise<ProviderBundleManifest | null> {
+  const dir = getBuiltinProviderDir(BUILTIN_DOUBAO_PROVIDER_ID)
+  const manifestFile = path.join(dir, 'manifest.json')
+  try {
+    const content = await readFile(manifestFile, 'utf8')
+    return validateManifest(JSON.parse(content))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 拿到对外暴露的内置 doubao manifest：
+ * - 移除 `apiKey` 字段（与视觉密钥共享，不需要用户重复填写）
+ * - 同步从 required 列表里移除 apiKey
+ */
+export async function getBuiltinDoubaoManifestForUi(): Promise<ProviderBundleManifest | null> {
+  const raw = await getBuiltinDoubaoManifestRaw()
+  if (!raw) return null
+
+  const properties: Record<string, ProviderSchemaField> = {}
+  for (const [key, field] of Object.entries(raw.configSchema.properties)) {
+    if (key === 'apiKey') continue
+    properties[key] = field
+  }
+  const required = (raw.configSchema.required || []).filter((k) => k !== 'apiKey')
+
+  return {
+    ...raw,
+    configSchema: {
+      type: 'object',
+      properties,
+      required
+    }
+  }
+}
+
+/** 内置 doubao 的虚拟 installed 描述（用于 provider:getInstalled 的回退） */
+export async function getBuiltinDoubaoInstalledInfo(): Promise<InstalledProviderInfo | null> {
+  const raw = await getBuiltinDoubaoManifestRaw()
+  if (!raw) return null
+  const dir = getBuiltinProviderDir(BUILTIN_DOUBAO_PROVIDER_ID)
+  return {
+    id: raw.id,
+    name: raw.name,
+    version: raw.version,
+    entryFile: path.join(dir, raw.entry),
+    installedAt: '0'
+  }
+}
+
+/** 直接加载内置 doubao provider；调用方负责传入合并好的 config（含 apiKey） */
+export async function loadBuiltinDoubaoProvider(
+  providerConfig: Record<string, any>
+): Promise<{ provider: ProviderAdapter; manifest: ProviderBundleManifest }> {
+  const installed = await getBuiltinDoubaoInstalledInfo()
+  if (!installed) {
+    throw new Error('内置 doubao provider 资源缺失')
+  }
+  return loadInstalledProvider(installed, providerConfig)
 }
 
 export function validateProviderConfig(

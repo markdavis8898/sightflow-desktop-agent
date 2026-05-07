@@ -239,13 +239,12 @@ function BottomBar({
       showToast(t('control.start.novisionkey'), 'error')
       return
     }
-    if (!settings.chatProvider?.installed) {
-      showToast(t('control.start.noprovider'), 'error')
-      return
-    }
+    // 没装自定义 provider → 走内置 doubao（getInstalled 会返回 isBuiltinDefault: true）
     const providerInfo = (await window.electron?.invoke('provider:getInstalled')) as {
       manifest: ProviderManifest | null
+      isBuiltinDefault?: boolean
     }
+    // doubao 默认共享视觉密钥，required 已剥离 apiKey
     const required = providerInfo?.manifest?.configSchema?.required || []
     const missing = required.find((key) => {
       const value = settings.chatProvider.config?.[key]
@@ -303,6 +302,8 @@ function SettingsPanel() {
   const [providerConfig, setProviderConfig] = useState<Record<string, any>>({})
   const [testing, setTesting] = useState(false)
   const [installing, setInstalling] = useState(false)
+  /** true 表示当前没装自定义 provider，正在用内置 doubao 默认值 */
+  const [isBuiltinDefault, setIsBuiltinDefault] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -318,7 +319,9 @@ function SettingsPanel() {
       const providerInfo = (await window.electron?.invoke('provider:getInstalled')) as {
         installed: InstalledProviderInfo | null
         manifest: ProviderManifest | null
+        isBuiltinDefault?: boolean
       }
+      setIsBuiltinDefault(Boolean(providerInfo?.isBuiltinDefault))
       if (providerInfo?.installed) {
         setInstalledProvider(providerInfo.installed)
       }
@@ -361,6 +364,7 @@ function SettingsPanel() {
         return
       }
 
+      setIsBuiltinDefault(false)
       setInstalledProvider(result.installed)
       setInstalledManifest(result.manifest)
       setProviderConfig((prev) => applyManifestDefaults(result.manifest as ProviderManifest, prev))
@@ -371,7 +375,7 @@ function SettingsPanel() {
   }, [providerManifestUrl])
 
   const handleSaveProvider = useCallback(async () => {
-    if (!installedManifest || !installedProvider) {
+    if (!installedManifest) {
       showToast(t('settings.providerInstall.required'), 'error')
       return
     }
@@ -386,16 +390,24 @@ function SettingsPanel() {
       return
     }
 
+    // 内置 doubao 默认模式：保存 config（model / systemPrompt 等），但 installed 仍为 null
+    // 这样下次仍走内置 doubao + 共享视觉密钥的路径
     await window.electron?.invoke('settings:set', {
       chatProvider: {
         manifestUrl: providerManifestUrl,
-        installed: installedProvider,
+        installed: isBuiltinDefault ? null : installedProvider,
         config: providerConfig
       }
     })
 
     showToast(t('settings.provider.saved'), 'success')
-  }, [installedManifest, installedProvider, providerConfig, providerManifestUrl])
+  }, [
+    installedManifest,
+    installedProvider,
+    providerConfig,
+    providerManifestUrl,
+    isBuiltinDefault
+  ])
 
   const handleTestConnection = useCallback(async () => {
     if (!visionApiKey) return
@@ -473,6 +485,13 @@ function SettingsPanel() {
       <div className="card">
         <div className="card-title">{t('settings.chatProvider')}</div>
 
+        {isBuiltinDefault ? (
+          <div className="form-hint" style={{ marginBottom: 12 }}>
+            默认使用内置 doubao 提供方，与上方视觉接口密钥共享 API Key，无需重复填写。
+            如需切换到其他聊天服务，请填入 manifest 地址安装。
+          </div>
+        ) : null}
+
         <div className="form-group">
           <label className="form-label">{t('settings.providerManifest')}</label>
           <input
@@ -494,7 +513,7 @@ function SettingsPanel() {
           </button>
         </div>
 
-        {installedProvider ? (
+        {installedProvider && !isBuiltinDefault ? (
           <div className="form-group">
             <label className="form-label">{t('settings.providerInstalled')}</label>
             <div className="form-hint">

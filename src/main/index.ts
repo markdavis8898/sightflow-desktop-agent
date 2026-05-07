@@ -13,9 +13,13 @@ import {
 } from '../core/wechat-channel-session'
 import { AppType } from '../core/rpa/types'
 import {
+  BUILTIN_DOUBAO_PROVIDER_ID,
+  getBuiltinDoubaoInstalledInfo,
+  getBuiltinDoubaoManifestForUi,
   getInstalledProviderManifest,
   installProviderFromUrl,
   InstalledProviderInfo,
+  loadBuiltinDoubaoProvider,
   loadInstalledProvider
 } from './provider-bundle'
 import {
@@ -175,10 +179,24 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('provider:getInstalled', async () => {
     const settings = normalizeSettings(settingsStore.store)
-    const manifest = await getInstalledProviderManifest(settings.chatProvider.installed)
+
+    // 用户安装过自定义 provider：原样返回
+    if (settings.chatProvider.installed) {
+      const manifest = await getInstalledProviderManifest(settings.chatProvider.installed)
+      return {
+        installed: settings.chatProvider.installed,
+        manifest,
+        isBuiltinDefault: false
+      }
+    }
+
+    // 没装过 → 回退到内置 doubao（apiKey 字段已剥离，使用视觉密钥）
+    const installed = await getBuiltinDoubaoInstalledInfo()
+    const manifest = await getBuiltinDoubaoManifestForUi()
     return {
-      installed: settings.chatProvider.installed,
-      manifest
+      installed,
+      manifest,
+      isBuiltinDefault: true
     }
   })
 
@@ -287,30 +305,47 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
     if (!settings.vision.apiKey) {
       return { ok: false, reason: 'no_vision_key', message: '请先填写视觉接口密钥' }
     }
+
+    // 没有自定义 provider → 走内置 doubao，使用视觉密钥
+    let provider
     if (!settings.chatProvider.installed) {
-      return { ok: false, reason: 'no_provider', message: '请先安装聊天服务' }
-    }
-
-    const installedManifest = await getInstalledProviderManifest(
-      settings.chatProvider.installed
-    )
-    const required = installedManifest?.configSchema?.required || []
-    const missing = required.find((key) => {
-      const value = settings.chatProvider.config?.[key]
-      return value === undefined || value === null || value === ''
-    })
-    if (missing) {
-      return {
-        ok: false,
-        reason: 'missing_required_field',
-        message: `缺少必填配置: ${missing}`
+      const loaded = await loadBuiltinDoubaoProvider({
+        ...settings.chatProvider.config,
+        apiKey: settings.vision.apiKey
+      })
+      provider = loaded.provider
+    } else {
+      const installedManifest = await getInstalledProviderManifest(
+        settings.chatProvider.installed
+      )
+      // doubao（无论是用户主动装的还是内置的）apiKey 由视觉密钥共享提供，不强校验
+      const isDoubao =
+        settings.chatProvider.installed.id === BUILTIN_DOUBAO_PROVIDER_ID
+      const required = (installedManifest?.configSchema?.required || []).filter(
+        (key) => !(isDoubao && key === 'apiKey')
+      )
+      const missing = required.find((key) => {
+        const value = settings.chatProvider.config?.[key]
+        return value === undefined || value === null || value === ''
+      })
+      if (missing) {
+        return {
+          ok: false,
+          reason: 'missing_required_field',
+          message: `缺少必填配置: ${missing}`
+        }
       }
-    }
 
-    const { provider } = await loadInstalledProvider(
-      settings.chatProvider.installed,
-      settings.chatProvider.config
-    )
+      const effectiveConfig = isDoubao
+        ? { ...settings.chatProvider.config, apiKey: settings.vision.apiKey }
+        : settings.chatProvider.config
+
+      const loaded = await loadInstalledProvider(
+        settings.chatProvider.installed,
+        effectiveConfig
+      )
+      provider = loaded.provider
+    }
 
     runtimeDevice = new RPADevice()
     runtimeDevice.setAppType(appType)
