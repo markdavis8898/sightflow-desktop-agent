@@ -174,6 +174,38 @@ const BUILTIN_PROVIDER_CATALOG: ProviderCatalogItem[] = [
         }
       ]
     }
+  },
+  {
+    id: 'minimax',
+    name: 'MiniMax M2.7',
+    description: '通过 MiniMax Token Plan 订阅使用 M2.7 多模态模型。',
+    version: '1.0.0',
+    manifestUrl: 'builtin://minimax',
+    capabilities: ['chat'],
+    configSchema: {
+      fields: [
+        {
+          key: 'apiKey',
+          label: 'API Key',
+          type: 'password',
+          required: true,
+          placeholder: '输入 MiniMax API Key'
+        },
+        {
+          key: 'model',
+          label: '模型',
+          type: 'text',
+          required: true,
+          defaultValue: 'MiniMax-M2.7'
+        },
+        {
+          key: 'systemPrompt',
+          label: '系统提示词',
+          type: 'textarea',
+          placeholder: '你是一个微信自动回复助手。根据截图中的聊天内容，生成合适的回复...'
+        }
+      ]
+    }
   }
 ]
 
