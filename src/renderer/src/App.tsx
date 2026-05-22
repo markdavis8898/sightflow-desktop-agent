@@ -176,33 +176,33 @@ const BUILTIN_PROVIDER_CATALOG: ProviderCatalogItem[] = [
     }
   },
   {
-    id: 'minimax',
-    name: 'MiniMax M2.7',
-    description: '通过 MiniMax Token Plan 订阅使用 M2.7 多模态模型。',
+    id: 'opencode-go-kimi',
+    description: '通过 OpenCode Go 网关使用 Kimi K2.5 多模态模型，支持微信截图自动回复。',
     version: '1.0.0',
-    manifestUrl: 'builtin://minimax',
+    manifestUrl: 'builtin://opencode-go-kimi',
     capabilities: ['chat'],
     configSchema: {
       fields: [
         {
           key: 'apiKey',
-          label: 'API Key',
+          label: 'OpenCode Go API Key',
           type: 'password',
           required: true,
-          placeholder: '输入 MiniMax API Key'
+          placeholder: '输入 OPENCODE_GO_API_KEY'
         },
         {
           key: 'model',
           label: '模型',
-          type: 'text',
+          type: 'select',
           required: true,
-          defaultValue: 'MiniMax-M2.7'
+          defaultValue: 'kimi-k2.5',
+          options: ['kimi-k2.5', 'kimi-k2.6', 'glm-5', 'glm-5.1']
         },
         {
           key: 'systemPrompt',
           label: '系统提示词',
           type: 'textarea',
-          placeholder: '你是一个微信自动回复助手。根据截图中的聊天内容，生成合适的回复...'
+          placeholder: '你是一个微信自动回复助手...'
         }
       ]
     }
