@@ -264,6 +264,39 @@ function App() {
     return cleanup
   }, [])
 
+  // ── 自动启动：如果 provider 已配好，进页面 2 秒后自动启动引擎 + 截图 ──
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
+        if (!settings?.vision?.apiKey || !settings?.chatProvider?.installed) return
+
+        const providerInfo = (await window.electron?.invoke('provider:getInstalled')) as {
+          manifest: { configSchema?: { required?: string[] } } | null
+          isBuiltinDefault?: boolean
+        } | undefined
+        const required = providerInfo?.manifest?.configSchema?.required || []
+        const missing = required.find((key) => {
+          const value = settings.chatProvider.config?.[key]
+          return value === undefined || value === null || value === ''
+        })
+        if (missing) return
+
+        const result = await window.electron?.invoke('engine:start', settings)
+        if (result?.success) {
+          setStatus('running')
+          // 截图保存到 D 盘
+          setTimeout(() => {
+            window.electron?.invoke('capture:screenshot', 'D:\\sightflow-screenshot.png')
+          }, 3000)
+        }
+      } catch {
+        // 静默失败，不干扰用户手动操作
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [])
+
   if (isSettingsWindow) {
     return (
       <div className="app settings-window">

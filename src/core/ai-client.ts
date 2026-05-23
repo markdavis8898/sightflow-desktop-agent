@@ -1,7 +1,7 @@
 // src/core/ai-client.ts
 // AI 客户端 — 统一封装所有大模型调用
 //
-// 使用火山引擎 Ark OpenAI 兼容 /chat/completions 端点 + doubao-seed-2-0-lite
+// 使用 OpenCode Go 网关 OpenAI 兼容 /chat/completions 端点 + kimi-k2.5
 // 两种用途：
 //   1. 聊天回复：截图 → AI 分析 → 回复文字
 //   2. VLM 视觉检测：截图 → AI 分析 → bbox/point 坐标
@@ -13,8 +13,8 @@ export interface AIClientConfig {
   systemPrompt: string
 }
 
-const DEFAULT_MODEL = 'doubao-seed-2-0-lite-260215'
-const DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
+const DEFAULT_MODEL = 'kimi-k2.5'
+const DEFAULT_BASE_URL = 'https://opencode.ai/zen/go/v1'
 
 const REPLY_SYSTEM_PROMPT = `你是一个微信自动回复助手。你会收到一张微信/企业微信的聊天窗口截图。
 
